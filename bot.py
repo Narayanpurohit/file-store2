@@ -15,6 +15,31 @@ def generate_slug(length=6):
 def generate_verification_slug():
     return secrets.token_urlsafe(12)
 
+async def check_subscription(client, user_id, slug):
+    from config import CHANNEL_1_ID, CHANNEL_2_ID
+
+    # Generate invite links
+    ch1_invite = await client.create_chat_invite_link(CHANNEL_1_ID, creates_join_request=False)
+    ch2_invite = await client.create_chat_invite_link(CHANNEL_2_ID, creates_join_request=True)
+
+    # Check Channel 1 membership
+    try:
+        ch1_member = await client.get_chat_member(CHANNEL_1_ID, user_id)
+        if ch1_member.status not in ("member", "administrator", "creator"):
+            raise Exception()
+    except:
+        return ch1_invite.invite_link, ch2_invite.invite_link
+
+    # Check Channel 2 join/request status
+    try:
+        ch2_member = await client.get_chat_member(CHANNEL_2_ID, user_id)
+        if ch2_member.status in ("left", "kicked"):
+            raise Exception()
+    except:
+        return ch1_invite.invite_link, ch2_invite.invite_link
+
+    return None, None  # means user passed
+
 @app.on_message(filters.document | filters.video | filters.audio)
 async def handle_file(client, message: Message):
     file_id = message.document.file_id if message.document else (
@@ -61,6 +86,20 @@ async def handle_start(client, message: Message):
     
     else:
         # File slug
+            # Force subscription check
+    ch1_link, ch2_link = await check_subscription(client, message.from_user.id, slug)
+    if ch1_link or ch2_link:
+        try_again_url = f"https://t.me/{(await client.get_me()).username}?start={slug}"
+        buttons = [
+            [InlineKeyboardButton("Join Channel 1", url=ch1_link)],
+            [InlineKeyboardButton("Request to Join Channel 2", url=ch2_link)],
+            [InlineKeyboardButton("✅ Try Again", url=try_again_url)]
+        ]
+        await message.reply_text(
+            "You must join both channels to access this bot.",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
         user = users_col.find_one({"user_id": user_id})
         if not user or user.get("expires_at", datetime.min) < datetime.utcnow():
             # Not verified
