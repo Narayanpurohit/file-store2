@@ -9,14 +9,17 @@ from db import files_col, users_col, verifications_col
 
 app = Client("file-bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Generate file slug with recognizable prefix
+# Generate file slug with "fs_" prefix
 def generate_slug(length=6):
     core = secrets.token_urlsafe(length)[:length]
     return f"fs_{core}"
 
-# Generate long slug for verification
+# Generate unique verification slug
 def generate_verification_slug():
-    return secrets.token_urlsafe(12)
+    slug = secrets.token_urlsafe(12)
+    while verifications_col.find_one({"slug": slug}):
+        slug = secrets.token_urlsafe(12)
+    return slug
 
 @app.on_message(filters.document | filters.video | filters.audio)
 async def handle_file(client, message: Message):
@@ -76,12 +79,15 @@ async def handle_start(client, message: Message):
         if not verification or verification["user_id"] != user_id:
             return await message.reply("Invalid or expired verification link.")
 
+        # Mark user as verified and invalidate the slug
         expires_at = datetime.utcnow() + timedelta(hours=4)
         users_col.update_one(
             {"user_id": user_id},
             {"$set": {"verified_at": datetime.utcnow(), "expires_at": expires_at}},
             upsert=True
         )
+        verifications_col.delete_one({"slug": slug})
+
         return await message.reply("You are now verified for 4 hours!")
 
     else:
