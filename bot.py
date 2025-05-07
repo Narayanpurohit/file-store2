@@ -55,6 +55,7 @@ async def handle_file(client, message: Message):
 
     link = f"https://t.me/{(await app.get_me()).username}?start={slug}"
     await message.reply_text(f"Here's your download link:\n{link}")
+    print(original_url)
 
 @app.on_message(filters.command("start"))
 async def handle_start(client, message: Message):
