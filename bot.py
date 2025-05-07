@@ -1,10 +1,11 @@
 import asyncio
 import secrets
+import httpx
 from datetime import datetime, timedelta
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from config import API_ID, API_HASH, BOT_TOKEN
+from config import API_ID, API_HASH, BOT_TOKEN, URL_SHORTENER_API, SHORTENER_DOMAIN
 from db import files_col, users_col, verifications_col
 
 app = Client("file-bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -20,6 +21,17 @@ def generate_verification_slug():
     while verifications_col.find_one({"slug": slug}):
         slug = secrets.token_urlsafe(12)
     return slug
+
+# URL shortener function
+async def shorten_url(original_url):
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{URL_SHORTENER_API}?url={original_url}")
+            data = response.json()
+            return data.get("shortenedUrl") or original_url
+    except Exception as e:
+        print(f"Shortening failed: {e}")
+        return original_url
 
 @app.on_message(filters.document | filters.video | filters.audio)
 async def handle_file(client, message: Message):
@@ -65,7 +77,12 @@ async def handle_start(client, message: Message):
                 "created_at": datetime.utcnow()
             })
             verify_link = f"https://t.me/{(await app.get_me()).username}?start={verification_slug}"
-            return await message.reply(f"Please verify yourself first:\n{verify_link}")
+            short_link = await shorten_url(verify_link)
+            return await message.reply(
+                f"Please verify yourself first:\n\n"
+                f"Original: {verify_link}\n"
+                f"Shortened: {short_link}"
+            )
 
         # Verified user — send file
         file_data = files_col.find_one({"slug": slug})
