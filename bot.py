@@ -1,28 +1,24 @@
-import asyncio
-import secrets
-from datetime import datetime, timedelta
-
 from pyrogram import Client, filters
-from pyrogram.types import Message
-from config import API_ID, API_HASH, BOT_TOKEN
-from db import files_col, users_col, verifications_col
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import random, string, time
+from config import API_ID, API_HASH, BOT_TOKEN, CHANNEL_1_ID, CHANNEL_2_ID
+from db import users_col, files_col, verifications_col
 
-app = Client("file-bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app = Client("FileShareBot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-def generate_slug(length=6):
-    return secrets.token_urlsafe(length)[:length]
+# Generate short slug (≤ 5 chars)
+def generate_short_slug():
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(3, 5)))
 
+# Generate long verification slug (≥ 15 chars)
 def generate_verification_slug():
-    return secrets.token_urlsafe(12)
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(15, 18)))
 
+# Check if user joined both channels
 async def check_subscription(client, user_id, slug):
-    from config import CHANNEL_1_ID, CHANNEL_2_ID
-
-    # Generate invite links
     ch1_invite = await client.create_chat_invite_link(CHANNEL_1_ID, creates_join_request=False)
     ch2_invite = await client.create_chat_invite_link(CHANNEL_2_ID, creates_join_request=True)
 
-    # Check Channel 1 membership
     try:
         ch1_member = await client.get_chat_member(CHANNEL_1_ID, user_id)
         if ch1_member.status not in ("member", "administrator", "creator"):
@@ -30,7 +26,6 @@ async def check_subscription(client, user_id, slug):
     except:
         return ch1_invite.invite_link, ch2_invite.invite_link
 
-    # Check Channel 2 join/request status
     try:
         ch2_member = await client.get_chat_member(CHANNEL_2_ID, user_id)
         if ch2_member.status in ("left", "kicked"):
@@ -38,85 +33,78 @@ async def check_subscription(client, user_id, slug):
     except:
         return ch1_invite.invite_link, ch2_invite.invite_link
 
-    return None, None  # means user passed
+    return None, None
 
-@app.on_message(filters.document | filters.video | filters.audio)
-async def handle_file(client, message: Message):
-    file_id = message.document.file_id if message.document else (
-              message.video.file_id if message.video else message.audio.file_id)
-    slug = generate_slug()
-
-    # Ensure uniqueness
-    while files_col.find_one({"slug": slug}):
-        slug = generate_slug()
-
-    files_col.insert_one({
-        "slug": slug,
-        "file_id": file_id,
-        "uploaded_by": message.from_user.id,
-        "created_at": datetime.utcnow()
-    })
-
-    link = f"https://t.me/{(await app.get_me()).username}?start={slug}"
-    await message.reply_text(f"Here's your download link:\n{link}")
-
-@app.on_message(filters.command("start"))
-async def handle_start(client, message: Message):
-    args = message.text.split(maxsplit=1)
-    if len(args) == 1:
-        return await message.reply("Welcome to the File Bot!")
-
-    slug = args[1].strip()
+@app.on_message(filters.private & filters.command("start"))
+async def start_handler(client, message):
     user_id = message.from_user.id
+    slug = message.text.split(" ", 1)[1] if len(message.command) > 1 else None
 
-    if len(slug) >= 15:
-        # Verification slug
-        verification = verifications_col.find_one({"slug": slug})
-        if not verification or verification["user_id"] != user_id:
-            return await message.reply("Invalid or expired verification link.")
+    # Add user to DB if not exists
+    if not users_col.find_one({"user_id": user_id}):
+        users_col.insert_one({"user_id": user_id})
 
-        # Mark user as verified
-        expires_at = datetime.utcnow() + timedelta(hours=4)
-        users_col.update_one(
-            {"user_id": user_id},
-            {"$set": {"verified_at": datetime.utcnow(), "expires_at": expires_at}},
-            upsert=True
-        )
-        return await message.reply("You are now verified for 4 hours!")
-    
+    if slug:
+        # Force subscription check
+        ch1_link, ch2_link = await check_subscription(client, user_id, slug)
+        if ch1_link or ch2_link:
+            try_again_url = f"https://t.me/{(await client.get_me()).username}?start={slug}"
+            buttons = [
+                [InlineKeyboardButton("Join Channel 1", url=ch1_link)],
+                [InlineKeyboardButton("Request to Join Channel 2", url=ch2_link)],
+                [InlineKeyboardButton("✅ Try Again", url=try_again_url)]
+            ]
+            await message.reply_text(
+                "You must join both channels to use this bot.",
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+            return
+
+        # If it's a verification slug
+        if len(slug) >= 15:
+            data = verifications_col.find_one({"slug": slug})
+            if data:
+                verifications_col.update_one(
+                    {"slug": slug},
+                    {"$set": {"user_id": user_id, "verified_at": int(time.time())}}
+                )
+                await message.reply_text("You’ve been verified for 4 hours. Now try the file link again.")
+            else:
+                await message.reply_text("Invalid or expired verification link.")
+        # If it's a file slug
+        else:
+            # Check if user is verified
+            verified = verifications_col.find_one({"user_id": user_id})
+            if verified and time.time() - verified["verified_at"] <= 4 * 3600:
+                file_data = files_col.find_one({"slug": slug})
+                if file_data:
+                    await client.send_cached_media(message.chat.id, file_data["file_id"])
+                else:
+                    await message.reply_text("File not found.")
+            else:
+                # Not verified: generate verification link
+                verify_slug = generate_verification_slug()
+                verifications_col.insert_one({
+                    "user_id": user_id,
+                    "slug": verify_slug,
+                    "verified_at": 0
+                })
+                verify_link = f"https://t.me/{(await client.get_me()).username}?start={verify_slug}"
+                await message.reply_text(
+                    "You are not verified. Click below to verify (valid for 4 hours):",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("✅ Verify Me", url=verify_link)]]
+                    )
+                )
     else:
-        # File slug
-            # Force subscription check
-    ch1_link, ch2_link = await check_subscription(client, message.from_user.id, slug)
-    if ch1_link or ch2_link:
-        try_again_url = f"https://t.me/{(await client.get_me()).username}?start={slug}"
-        buttons = [
-            [InlineKeyboardButton("Join Channel 1", url=ch1_link)],
-            [InlineKeyboardButton("Request to Join Channel 2", url=ch2_link)],
-            [InlineKeyboardButton("✅ Try Again", url=try_again_url)]
-        ]
-        await message.reply_text(
-            "You must join both channels to access this bot.",
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-        return
-        user = users_col.find_one({"user_id": user_id})
-        if not user or user.get("expires_at", datetime.min) < datetime.utcnow():
-            # Not verified
-            verification_slug = generate_verification_slug()
-            verifications_col.insert_one({
-                "slug": verification_slug,
-                "user_id": user_id,
-                "created_at": datetime.utcnow()
-            })
-            verify_link = f"https://t.me/{(await app.get_me()).username}?start={verification_slug}"
-            return await message.reply(f"Please verify yourself first:\n{verify_link}")
+        await message.reply_text("Send me a file and I’ll give you a sharable link!")
 
-        # Verified user — send file
-        file_data = files_col.find_one({"slug": slug})
-        if not file_data:
-            return await message.reply("Invalid file link.")
-
-        await client.send_document(chat_id=message.chat.id, document=file_data["file_id"])
+@app.on_message(filters.private & filters.document)
+async def handle_file(client, message):
+    slug = generate_short_slug()
+    file_id = message.document.file_id
+    files_col.insert_one({"slug": slug, "file_id": file_id})
+    link = f"https://t.me/{(await client.get_me()).username}?start={slug}"
+    await message.reply_text(f"Here is your link:\n`{link}`", quote=True)
 
 app.run()
