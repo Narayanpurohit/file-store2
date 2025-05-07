@@ -1,94 +1,115 @@
+import os
+import random
+import string
+import asyncio
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import random, string, time
-from config import API_ID, API_HASH, BOT_TOKEN, CHANNEL_1_ID, CHANNEL_2_ID
-from db import users_col, files_col, verifications_col
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.errors import UserNotParticipant
+from config import API_ID, API_HASH, BOT_TOKEN, MONGO_URL, CHANNEL_1_ID, CHANNEL_2_ID, STORAGE_DIR
+from pymongo import MongoClient
 
-app = Client("FileShareBot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+bot = Client("file_share_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+client = MongoClient(MONGO_URL)
+db = client["file_share_bot"]
+files_col = db["files"]
+verify_col = db["verify"]
+verified_users = {}
 
-def generate_short_slug():
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(3, 5)))
-
-def generate_verification_slug():
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=random.randint(15, 18)))
-
-async def check_channel_2_subscription(client, user_id):
-    try:
-        member = await client.get_chat_member(CHANNEL_2_ID, user_id)
-        if member.status in ("member", "administrator", "creator"):
-            return True
-    except:
-        pass
-    return False
-
-@app.on_message(filters.private & filters.command("start"))
-async def start_handler(client, message):
+# Force subscription check (only channel 2)
+async def check_force_sub(bot, message):
     user_id = message.from_user.id
-    slug = message.text.split(" ", 1)[1] if len(message.command) > 1 else None
 
-    if not users_col.find_one({"user_id": user_id}):
-        users_col.insert_one({"user_id": user_id})
+    try:
+        await bot.get_chat_member(CHANNEL_2_ID, user_id)
+        return True
+    except UserNotParticipant:
+        channel_1_invite = await bot.create_chat_invite_link(CHANNEL_1_ID, creates_join_request=True)
+        channel_2_invite = await bot.create_chat_invite_link(CHANNEL_2_ID)
 
-    if slug:
-        # Generate invite links
-        ch1_link = (await client.create_chat_invite_link(CHANNEL_1_ID, creates_join_request=True)).invite_link
-        ch2_link = (await client.create_chat_invite_link(CHANNEL_2_ID, creates_join_request=False)).invite_link
+        bot_username = (await bot.get_me()).username
+        start_param = message.command[1] if len(message.command) > 1 else ""
+        start_link = f"https://t.me/{bot_username}?start={start_param}"
 
-        is_member = await check_channel_2_subscription(client, user_id)
-        if not is_member:
-            try_again_url = f"https://t.me/{(await client.get_me()).username}?start={slug}"
-            buttons = [
-                [InlineKeyboardButton("Request to Join Channel 1", url=ch1_link)],
-                [InlineKeyboardButton("Join Channel 2", url=ch2_link)],
-                [InlineKeyboardButton("✅ Try Again", url=try_again_url)]
-            ]
-            await message.reply_text(
-                "You must join the required channels to access this file.",
-                reply_markup=InlineKeyboardMarkup(buttons)
-            )
-            return
+        buttons = [
+            [InlineKeyboardButton("Join Channel 1", url=channel_1_invite.invite_link)],
+            [InlineKeyboardButton("Join Channel 2", url=channel_2_invite.invite_link)],
+            [InlineKeyboardButton("✅ Try Again", url=start_link)]
+        ]
 
-        if len(slug) >= 15:
-            data = verifications_col.find_one({"slug": slug})
+        await message.reply_photo(
+            photo="https://telegra.ph/file/5f5e22bd75730316fba60.jpg",
+            caption="**To use this bot, please join both channels first.**",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return False
+
+# Slug generator
+def generate_slug(length=5):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
+# /start handler
+@bot.on_message(filters.command("start") & filters.private)
+async def start_command(client: Client, message: Message):
+    if not await check_force_sub(client, message):
+        return
+
+    args = message.text.split(maxsplit=1)
+    if len(args) == 2:
+        slug = args[1]
+
+        if len(slug) > 5:
+            data = verify_col.find_one({"slug": slug})
             if data:
-                verifications_col.update_one(
-                    {"slug": slug},
-                    {"$set": {"user_id": user_id, "verified_at": int(time.time())}}
-                )
-                await message.reply_text("You are now verified for 4 hours. Please use the file link again.")
+                verified_users[message.from_user.id] = asyncio.get_event_loop().time()
+                await message.reply("You have been verified for 4 hours.")
             else:
-                await message.reply_text("Invalid or expired verification link.")
+                await message.reply("Invalid or expired verification link.")
         else:
-            verified = verifications_col.find_one({"user_id": user_id})
-            if verified and time.time() - verified["verified_at"] <= 4 * 3600:
-                file_data = files_col.find_one({"slug": slug})
-                if file_data:
-                    await client.send_cached_media(message.chat.id, file_data["file_id"])
-                else:
-                    await message.reply_text("File not found.")
+            now = asyncio.get_event_loop().time()
+            last_verified = verified_users.get(message.from_user.id, 0)
+            if now - last_verified > 14400:  # 4 hours
+                verif_slug = generate_slug(16)
+                verify_col.insert_one({"slug": verif_slug, "user_id": message.from_user.id})
+                bot_username = (await client.get_me()).username
+                verify_link = f"https://t.me/{bot_username}?start={verif_slug}"
+                await message.reply(f"You need to verify first. Click [here]({verify_link}) to verify.", disable_web_page_preview=True)
             else:
-                verify_slug = generate_verification_slug()
-                verifications_col.insert_one({
-                    "user_id": user_id,
-                    "slug": verify_slug,
-                    "verified_at": 0
-                })
-                verify_link = f"https://t.me/{(await client.get_me()).username}?start={verify_slug}"
-                await message.reply_text(
-                    "You are not verified. Click the button below to verify (valid for 4 hours):",
-                    reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("✅ Verify Me", url=verify_link)]]
-                    )
-                )
+                file = files_col.find_one({"slug": slug})
+                if file:
+                    await message.reply_document(document=file["file_path"])
+                else:
+                    await message.reply("File not found.")
     else:
-        await message.reply_text("Send me a file and I’ll give you a shareable link!")
+        await message.reply("Send me a file to generate a shareable link.")
 
-@app.on_message(filters.private & filters.document)
-async def handle_file(client, message):
-    slug = generate_short_slug()
-    file_id = message.document.file_id
-    files_col.insert_one({"slug": slug, "file_id": file_id})
-    link = f"https://t.me/{(await client.get_me()).username}?start={slug}"
-    await message.reply_text(f"Here is your link:\n`{link}`", quote=True)
+# Save file and generate link
+@bot.on_message(filters.document & filters.private)
+async def save_file(client: Client, message: Message):
+    media = message.document
+    filename = media.file_name
+    base, ext = os.path.splitext(filename)
+    safe_filename = filename
+    counter = 1
 
-app.run()
+    while os.path.exists(os.path.join(STORAGE_DIR, safe_filename)):
+        safe_filename = f"{base}_{counter}{ext}"
+        counter += 1
+
+    file_path = os.path.join(STORAGE_DIR, safe_filename)
+    await message.download(file_path)
+
+    slug = generate_slug()
+    while files_col.find_one({"slug": slug}):
+        slug = generate_slug()
+
+    files_col.insert_one({
+        "slug": slug,
+        "file_path": file_path,
+        "user_id": message.from_user.id
+    })
+
+    bot_username = (await client.get_me()).username
+    share_link = f"https://t.me/{bot_username}?start={slug}"
+    await message.reply(f"Here is your shareable link:\n`{share_link}`", quote=True)
+
+bot.run()
