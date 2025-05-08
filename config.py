@@ -8,5 +8,5 @@ CHANNEL_2_ID = -1002024228864  # Replace with your channel 2 ID
 MONGO_URI = "mongodb+srv://gohan1thesaiyan:Q0KU3XQ3KF1ExTNV@cluster0.riwy2lw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 DATABASE_NAME = "filebot"
 
-URL_SHORTENER_API = "https://api.shareus.io/easy_api?key=zu1xmKAMdlguQSBt5c8ais2aV212&link="  # Example: https://tnlink.in/api
+URL_SHORTENER_API = "https://linkshortify.com/st?api=a382b158fc95c53e886829978484a093cf8e2eef&url="  # Example: https://tnlink.in/api
 SHORTENER_DOMAIN = "https://your-shortener.site/"      # Base URL for display
