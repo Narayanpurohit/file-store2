@@ -23,17 +23,22 @@ def generate_verification_slug():
     return slug
 
 # URL shortener function
-async def shorten_url(original_url):
+import requests
+
+def get_short_link(link):
+    from config import URL_SHORTENER_API, SHORTENER_DOMAIN
+
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{URL_SHORTENER_API}?key={URL_SHORTENER_KEY}&link={original_url}"
-            )
-            data = response.json()
-            return data.get("shortenedUrl", original_url)
+        api_url = f"https://{SHORTENER_DOMAIN}/api?api={URL_SHORTENER_API}&url={link}"
+        response = requests.get(api_url)
+        data = response.json()
+
+        if data.get("status") == "success" and "shortenedUrl" in data:
+            return data["shortenedUrl"]
     except Exception as e:
         print(f"Shortening failed: {e}")
-        return original_url
+
+    return link  # fallback to original if something fails
 
 @app.on_message(filters.document | filters.video | filters.audio)
 async def handle_file(client, message: Message):
@@ -80,7 +85,7 @@ async def handle_start(client, message: Message):
                 "created_at": datetime.utcnow()
             })
             verify_link = f"https://t.me/{(await app.get_me()).username}?start={verification_slug}"
-            short_link = await shorten_url(verify_link)
+            short_link = get_short_link(verify_link)
             return await message.reply(
                 f"Please verify yourself first:\n\n"
                 f"Original: {verify_link}\n"
