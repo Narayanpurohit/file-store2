@@ -4,16 +4,25 @@ from datetime import datetime, timedelta
 import requests
 
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+    InputMediaPhoto
+)
+
 from config import API_ID, API_HASH, BOT_TOKEN, URL_SHORTENER_API, SHORTENER_DOMAIN, ADMINS
+
 from db import files_col, users_col, verifications_col
 
 app = Client("file-bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Generate slug with recognizable prefix
+
 def generate_slug(length=6):
     core = secrets.token_urlsafe(length)[:length]
     return f"fs_{core}"
+
 
 def generate_verification_slug():
     slug = secrets.token_urlsafe(12)
@@ -21,10 +30,9 @@ def generate_verification_slug():
         slug = secrets.token_urlsafe(12)
     return slug
 
-# Shorten URL using configured shortener
+
 def get_short_link(link):
     try:
-        from config import URL_SHORTENER_API, SHORTENER_DOMAIN
         if not link.startswith("http://") and not link.startswith("https://"):
             link = "https://" + link
 
@@ -38,16 +46,16 @@ def get_short_link(link):
         print(f"Shortening failed: {e}")
     return link
 
+
 @app.on_message(filters.video)
 async def handle_file(client, message: Message):
     user_id = message.from_user.id
     if user_id not in ADMINS:
         return await message.reply("Only admins can upload and generate file links.")
 
-    file_id = (message.video.file_id)
+    file_id = message.video.file_id
     slug = generate_slug()
 
-    # Ensure uniqueness
     while files_col.find_one({"slug": slug}):
         slug = generate_slug()
 
@@ -61,6 +69,7 @@ async def handle_file(client, message: Message):
     link = f"https://t.me/{(await app.get_me()).username}?start={slug}"
     await message.reply_text(f"Here's your download link:\n{link}")
 
+
 @app.on_message(filters.command("start"))
 async def handle_start(client, message: Message):
     args = message.text.split(maxsplit=1)
@@ -71,10 +80,8 @@ async def handle_start(client, message: Message):
     user_id = message.from_user.id
 
     if slug.startswith("fs_"):
-        # File link — require verification
         user = users_col.find_one({"user_id": user_id})
         if not user or user.get("expires_at", datetime.min) < datetime.utcnow():
-            # Not verified
             verification_slug = generate_verification_slug()
             verifications_col.insert_one({
                 "slug": verification_slug,
@@ -85,15 +92,13 @@ async def handle_start(client, message: Message):
             short_link = get_short_link(verify_link)
 
             buttons = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Verify", url=short_link)],
-                [InlineKeyboardButton("How to verify?", url="https://t.me/DriveOO1bot?start=fs_taDm6O")]
+                [InlineKeyboardButton("Buy subscription | No ads", callback_data="buy_sub")]
             ])
             return await message.reply(
-                "You are not verified, please verify yourself to continue:",
+                f"You are not verified, please verify yourself to continue:\n\nVerification link: {short_link}",
                 reply_markup=buttons
             )
 
-        # Verified — send file
         file_data = files_col.find_one({"slug": slug})
         if not file_data:
             return await message.reply("Invalid file link.")
@@ -103,16 +108,13 @@ async def handle_start(client, message: Message):
             video=file_data["file_id"],
             caption="This message will be deleted in 30 minutes"
         )
-        # Schedule message deletion in 30 minutes
         asyncio.create_task(delete_message_after_delay(client, message.chat.id, sent.id, delay_minutes=30))
 
     elif len(slug) >= 15:
-        # Verification link
         verification = verifications_col.find_one({"slug": slug})
         if not verification or verification["user_id"] != user_id:
             return await message.reply("Invalid or expired verification link.")
 
-        # Mark verified and delete the slug
         expires_at = datetime.utcnow() + timedelta(hours=12)
         users_col.update_one(
             {"user_id": user_id},
@@ -126,12 +128,54 @@ async def handle_start(client, message: Message):
     else:
         return await message.reply("Invalid or unrecognized link.")
 
-# Message auto-deletion function
+
+@app.on_callback_query(filters.regex("buy_sub"))
+async def handle_buy_subscription(client, callback_query: CallbackQuery):
+    await callback_query.message.edit_media(
+        media=InputMediaPhoto(
+            media="https://envs.sh/8-u.jpg",
+            caption=(
+                "10 days - 20 INR\n"
+                "1 Month - 50 INR\n"
+                "3 Month - 120 INR\n\n"
+                "• This plan allows you to use our bots without any verification steps (ads).\n\n"
+                "For other payment methods, contact @JN_DEV"
+            )
+        ),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Send screenshots", url="https://t.me/JN_DEV")],
+            [InlineKeyboardButton("Back", callback_data="back_to_verify")]
+        ])
+    )
+
+
+@app.on_callback_query(filters.regex("back_to_verify"))
+async def handle_back_verify(client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    verification_slug = generate_verification_slug()
+    verifications_col.insert_one({
+        "slug": verification_slug,
+        "user_id": user_id,
+        "created_at": datetime.utcnow()
+    })
+    verify_link = f"https://t.me/{(await app.get_me()).username}?start={verification_slug}"
+    short_link = get_short_link(verify_link)
+
+    buttons = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Buy subscription | No ads", callback_data="buy_sub")]
+    ])
+    await callback_query.message.edit_caption(
+        caption=f"You are not verified, please verify yourself to continue:\n\nVerification link: {short_link}",
+        reply_markup=buttons
+    )
+
+
 async def delete_message_after_delay(client, chat_id, message_id, delay_minutes=30):
     await asyncio.sleep(delay_minutes * 60)
     try:
         await client.delete_messages(chat_id, message_id)
     except Exception as e:
         print(f"Failed to delete message {message_id} in chat {chat_id}: {e}")
+
 
 app.run()
