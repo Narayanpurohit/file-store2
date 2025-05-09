@@ -176,6 +176,27 @@ async def delete_message_after_delay(client, chat_id, message_id, delay_minutes=
         await client.delete_messages(chat_id, message_id)
     except Exception as e:
         print(f"Failed to delete message {message_id} in chat {chat_id}: {e}")
+        
+@app.on_message(filters.command("upgrade"))
+async def admin_upgrade_user(client, message: Message):
+    if message.from_user.id not in ADMINS:
+        return await message.reply("You are not authorized to use this command.")
+
+    args = message.text.split()
+    if len(args) != 3 or not args[1].isdigit() or not args[2].isdigit():
+        return await message.reply("Usage: /upgrade <user_id> <days>")
+
+    user_id = int(args[1])
+    days = int(args[2])
+    expires_at = datetime.utcnow() + timedelta(days=days)
+
+    users_col.update_one(
+        {"user_id": user_id},
+        {"$set": {"verified_at": datetime.utcnow(), "expires_at": expires_at}},
+        upsert=True
+    )
+
+    await message.reply(f"User {user_id} has been upgraded for {days} day(s).")
 
 
 app.run()
