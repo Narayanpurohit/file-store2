@@ -38,17 +38,13 @@ def get_short_link(link):
         print(f"Shortening failed: {e}")
     return link
 
-@app.on_message(filters.document | filters.video | filters.audio)
+@app.on_message(filters.video)
 async def handle_file(client, message: Message):
     user_id = message.from_user.id
     if user_id not in ADMINS:
         return await message.reply("Only admins can upload and generate file links.")
 
-    file_id = (
-        message.document.file_id if message.document else
-        message.video.file_id if message.video else
-        message.audio.file_id
-    )
+    file_id = (message.video.file_id)
     slug = generate_slug()
 
     # Ensure uniqueness
@@ -102,9 +98,9 @@ async def handle_start(client, message: Message):
         if not file_data:
             return await message.reply("Invalid file link.")
 
-        sent = await client.send_document(
+        sent = await client.send_video(
             chat_id=message.chat.id,
-            document=file_data["file_id"],
+            video=file_data["file_id"],
             caption="This message will be deleted in 30 minutes"
         )
         # Schedule message deletion in 30 minutes
