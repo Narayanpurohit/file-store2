@@ -91,9 +91,9 @@ async def handle_start(client, message: Message):
             verify_link = f"https://t.me/{(await app.get_me()).username}?start={verification_slug}"
             short_link = get_short_link(verify_link)
 
-            buttons = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Buy subscription | No ads", callback_data="buy_sub")]
-            ])
+            buttons = InlineKeyboardMarkup([[InlineKeyboardButton("How to verify?", callback_data="How_to_verify❓")],
+    [InlineKeyboardButton("💳 Buy subscription| No ads", callback_data="buy_subs")]
+])
             return await message.reply(
                 f"You are not verified, please verify yourself to continue:\n\nVerification link: {short_link}",
                 reply_markup=buttons
