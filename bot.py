@@ -198,5 +198,39 @@ async def admin_upgrade_user(client, message: Message):
 
     await message.reply(f"User {user_id} has been upgraded for {days} day(s).")
 
+@app.on_message(filters.command("check"))
+async def check_verification(client, message: Message):
+    user_id = message.from_user.id
+    user = users_col.find_one({"user_id": user_id})
+
+    if not user or user.get("expires_at", datetime.min) < datetime.utcnow():
+        return await message.reply("You are not verified.")
+
+    time_left = user["expires_at"] - datetime.utcnow()
+    hours = time_left.total_seconds() // 3600
+    minutes = (time_left.total_seconds() % 3600) // 60
+
+    return await message.reply(f"You are verified for another {int(hours)}h {int(minutes)}m.")
+
+@app.on_message(filters.command("broadcast") & filters.reply)
+async def broadcast_message(client, message: Message):
+    if message.from_user.id not in ADMINS:
+        return await message.reply("You're not authorized to use this command.")
+
+    replied = message.reply_to_message
+    if not replied:
+        return await message.reply("Please reply to the message you want to broadcast.")
+
+    users = users_col.find()
+    sent_count = 0
+    for user in users:
+        try:
+            await replied.copy(chat_id=user["user_id"])
+            sent_count += 1
+        except Exception as e:
+            print(f"Failed to send to {user['user_id']}: {e}")
+
+    await message.reply(f"Broadcast sent to {sent_count} users.")
+
 
 app.run()
