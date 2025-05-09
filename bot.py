@@ -197,6 +197,8 @@ async def admin_upgrade_user(client, message: Message):
     )
 
     await message.reply(f"User {user_id} has been upgraded for {days} day(s).")
+    await client.send_message(
+            chat_id=user_id,text=f"has been upgraded for {days} day(s).")
 
 @app.on_message(filters.command("check"))
 async def check_verification(client, message: Message):
@@ -232,5 +234,16 @@ async def broadcast_message(client, message: Message):
 
     await message.reply(f"Broadcast sent to {sent_count} users.")
 
+@app.on_callback_query(filters.regex("how_to_verify"))
+async def how_to_verify_handler(client, callback_query):
+    await callback_query.answer()
+    try:
+        await client.send_video(
+            chat_id=callback_query.from_user.id,
+            video="BAACAgUAAxkBAAEEleloHg1hR92Z1YRh4RveU_kjHVGLHwACgxUAAtum8FQyo6V8lYfYTR4E",
+            caption="Watch this video to learn how to verify yourself."
+        )
+    except Exception as e:
+        print(f"Error sending how-to video: {e}")
 
 app.run()
