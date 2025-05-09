@@ -198,7 +198,7 @@ async def admin_upgrade_user(client, message: Message):
 
     await message.reply(f"User {user_id} has been upgraded for {days} day(s).")
     await client.send_message(
-            chat_id=user_id,text=f"has been upgraded for {days} day(s).")
+            chat_id=user_id,text=f" you has been upgraded for **{days} day(s).**")
 
 @app.on_message(filters.command("check"))
 async def check_verification(client, message: Message):
