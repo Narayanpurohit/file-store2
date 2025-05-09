@@ -1,6 +1,7 @@
 API_ID = 26847865  # your Telegram API ID
 API_HASH = "0ef9fdd3e5f1ed49d4eb918a07b8e5d6"
 BOT_TOKEN = "7622470404:AAFrLIDel4CKaqy-UU7lzVNPcNJuyt4cvJA"
+ADMINS = [6789146594, 5597521952]  # Replace with actual admin Telegram IDs
 
 CHANNEL_1_ID = -1002032638134  # Replace with your channel 1 ID
 CHANNEL_2_ID = -1002024228864  # Replace with your channel 2 ID
