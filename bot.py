@@ -26,7 +26,8 @@ def generate_verification_slug():
 async def shorten_url(original_url):
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{URL_SHORTENER_API}{original_url}")
+            response = await client.get(f"{URL_SHORTENER_API}?url={original_url}")
+            print("Response text:", response.text)  # Debug print
             data = response.json()
             return data.get("shortenedUrl") or original_url
     except Exception as e:
