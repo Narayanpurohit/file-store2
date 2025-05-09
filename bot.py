@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from config import API_ID, API_HASH, BOT_TOKEN, URL_SHORTENER_API, SHORTENER_DOMAIN
+from config import API_ID, API_HASH, BOT_TOKEN, URL_SHORTENER_API, URL_SHORTENER_KEY
 from db import files_col, users_col, verifications_col
 
 app = Client("file-bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
