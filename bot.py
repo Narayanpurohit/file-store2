@@ -12,7 +12,7 @@ from pyrogram.types import (
     CallbackQuery,
     InputMediaPhoto
 )
-from config import API_ID, API_HASH, BOT_TOKEN, URL_SHORTENER_API, SHORTENER_DOMAIN, ADMINS, BOT_TOKEN2
+from config import API_ID, API_HASH, BOT_TOKEN, URL_SHORTENER_API, SHORTENER_DOMAIN, ADMINS
 from db import files_col, users_col, verifications_col
 
 # Configure logging
@@ -24,7 +24,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Client("file-bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-app2 = Client("redirect-bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN2)
 
 
 def generate_slug(length=6):
@@ -266,41 +265,9 @@ async def how_to_verify_handler(client, callback_query):
     except Exception as e:
         logger.error(f"Error sending how-to video: {e}")
 
-@app2.on_message(filters.private & filters.command("start"))
-async def start_handler(client, message):
-    if len(message.command) > 1:
-        payload = message.command[1]
-        target_bot = "Itadori101bot" if len(payload) < 15 else "jin_ho_bot"
-        new_link = f"https://t.me/{target_bot}?start={payload}"
-
-        sent = await message.reply_text(
-            "This message will be deleted in 10 minutes. Use link before that.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Click here", url=new_link)]
-            ])
-        )
-        await asyncio.sleep(600)
-        await sent.delete()
-    else:
-        await message.reply_text("Welcome! Please use a valid start link.")
-
 
 # Run the bot
-#if __name__ == "__main__":
-    #app2.run()
-    #app2.run()
-from pyrogram import idle
-
 if __name__ == "__main__":
-    import asyncio
+    app.run()
+    
 
-    async def main():
-        await app.start()
-        await app2.start()
-        print("Both bots are running...")
-        await idle()  # Keeps the bots running until manually stopped
-
-        await app.stop()
-        await app2.stop()
-
-    asyncio.run(main())
