@@ -1,5 +1,6 @@
 import asyncio
 import secrets
+import logging
 from datetime import datetime, timedelta
 import requests
 
@@ -13,8 +14,16 @@ from pyrogram.types import (
 )
 
 from config import API_ID, API_HASH, BOT_TOKEN, URL_SHORTENER_API, SHORTENER_DOMAIN, ADMINS
-
 from db import files_col, users_col, verifications_col
+from bot2 import app2  # Second bot
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
 
 app = Client("file-bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -43,7 +52,7 @@ def get_short_link(link):
         if data.get("status") == "success" and "shortenedUrl" in data:
             return data["shortenedUrl"]
     except Exception as e:
-        print(f"Shortening failed: {e}")
+        logger.error(f"Shortening failed: {e}")
     return link
 
 
@@ -68,6 +77,7 @@ async def handle_file(client, message: Message):
 
     link = f"https://t.me/{(await app.get_me()).username}?start={slug}"
     await message.reply_text(f"Here's your download link:\n{link}")
+    logger.info(f"File uploaded by {user_id}, slug: {slug}")
 
 
 @app.on_message(filters.command("start"))
@@ -91,9 +101,10 @@ async def handle_start(client, message: Message):
             verify_link = f"https://t.me/{(await app.get_me()).username}?start={verification_slug}"
             short_link = get_short_link(verify_link)
 
-            buttons = InlineKeyboardMarkup([[InlineKeyboardButton("How to verify?", callback_data="How_to_verify❓")],
-    [InlineKeyboardButton("💳 Buy subscription| No ads", callback_data="buy_subs")]
-])
+            buttons = InlineKeyboardMarkup([
+                [InlineKeyboardButton("How to verify?", callback_data="How_to_verify❓")],
+                [InlineKeyboardButton("💳 Buy subscription| No ads", callback_data="buy_subs")]
+            ])
             return await message.reply(
                 f"You are not verified, please verify yourself to continue:\n\nVerification link: {short_link}",
                 reply_markup=buttons
@@ -108,7 +119,8 @@ async def handle_start(client, message: Message):
             video=file_data["file_id"],
             caption="This message will be deleted in 30 minutes"
         )
-        asyncio.create_task(delete_message_after_delay(client, message.chat.id, sent.id, delay_minutes=30))
+        asyncio.create_task(delete_message_after_delay(client, message.chat.id, sent.id))
+        logger.info(f"Sent file {file_data['file_id']} to {user_id}")
 
     elif len(slug) >= 15:
         verification = verifications_col.find_one({"slug": slug})
@@ -123,6 +135,7 @@ async def handle_start(client, message: Message):
         )
         verifications_col.delete_one({"slug": slug})
 
+        logger.info(f"User {user_id} verified for 12 hours")
         return await message.reply("You are now verified for 12 hours!")
 
     else:
@@ -174,9 +187,11 @@ async def delete_message_after_delay(client, chat_id, message_id, delay_minutes=
     await asyncio.sleep(delay_minutes * 60)
     try:
         await client.delete_messages(chat_id, message_id)
+        logger.info(f"Deleted message {message_id} in chat {chat_id}")
     except Exception as e:
-        print(f"Failed to delete message {message_id} in chat {chat_id}: {e}")
-        
+        logger.warning(f"Failed to delete message {message_id} in chat {chat_id}: {e}")
+
+
 @app.on_message(filters.command("upgrade"))
 async def admin_upgrade_user(client, message: Message):
     if message.from_user.id not in ADMINS:
@@ -198,7 +213,11 @@ async def admin_upgrade_user(client, message: Message):
 
     await message.reply(f"User {user_id} has been upgraded for {days} day(s).")
     await client.send_message(
-            chat_id=user_id,text=f" you has been upgraded for **{days} day(s).**")
+        chat_id=user_id,
+        text=f"You have been upgraded for **{days} day(s).**"
+    )
+    logger.info(f"Admin {message.from_user.id} upgraded user {user_id} for {days} days")
+
 
 @app.on_message(filters.command("check"))
 async def check_verification(client, message: Message):
@@ -213,6 +232,7 @@ async def check_verification(client, message: Message):
     minutes = (time_left.total_seconds() % 3600) // 60
 
     return await message.reply(f"You are verified for another {int(hours)}h {int(minutes)}m.")
+
 
 @app.on_message(filters.command("broadcast") & filters.reply)
 async def broadcast_message(client, message: Message):
@@ -230,9 +250,10 @@ async def broadcast_message(client, message: Message):
             await replied.copy(chat_id=user["user_id"])
             sent_count += 1
         except Exception as e:
-            print(f"Failed to send to {user['user_id']}: {e}")
+            logger.warning(f"Failed to send to {user['user_id']}: {e}")
 
     await message.reply(f"Broadcast sent to {sent_count} users.")
+
 
 @app.on_callback_query(filters.regex("how_to_verify"))
 async def how_to_verify_handler(client, callback_query):
@@ -244,15 +265,15 @@ async def how_to_verify_handler(client, callback_query):
             caption="Watch this video to learn how to verify yourself."
         )
     except Exception as e:
-        print(f"Error sending how-to video: {e}")
+        logger.error(f"Error sending how-to video: {e}")
 
-from bot2 import app2  # Import the second bot's app
-app.start(),
 
-#if __name__ == "__main__":
-    #import asyncio
-    #async def main():
-        #await asyncio.gather(
-            
-        
-    #asyncio.run(main())
+# Run both bots
+if __name__ == "__main__":
+    import asyncio
+    async def main():
+        await asyncio.gather(
+            app.start(),
+            app2.start()
+        )
+    asyncio.run(main())
