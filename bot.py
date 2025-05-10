@@ -287,5 +287,5 @@ async def start_handler(client, message):
 
 # Run the bot
 if __name__ == "__main__":
-    app.run()
     app2.run()
+    #app2.run()
