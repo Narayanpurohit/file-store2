@@ -13,7 +13,7 @@ from pyrogram.types import (
     InputMediaPhoto
 )
 from bot2 import app2
-from config import API_ID, API_HASH, BOT_TOKEN, URL_SHORTENER_API, SHORTENER_DOMAIN, ADMINS
+from config import API_ID, API_HASH, BOT_TOKEN, URL_SHORTENER_API, SHORTENER_DOMAIN, ADMINS, BOT_TOKEN2
 from db import files_col, users_col, verifications_col
 
 # Configure logging
@@ -25,6 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Client("file-bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app2 = Client("redirect-bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN2)
 
 
 def generate_slug(length=6):
