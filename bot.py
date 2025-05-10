@@ -248,7 +248,7 @@ async def how_to_verify_handler(client, callback_query):
 
 from bot2 import app2  # Import the second bot's app
 app.start(),
-app2.start()
+
 #if __name__ == "__main__":
     #import asyncio
     #async def main():
