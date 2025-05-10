@@ -27,4 +27,3 @@ async def start_handler(client, message):
     else:
         await message.reply_text("Welcome! Please use a valid start link.")
 
-app2.run()
