@@ -247,12 +247,12 @@ async def how_to_verify_handler(client, callback_query):
         print(f"Error sending how-to video: {e}")
 
 from bot2 import app2  # Import the second bot's app
-
-if __name__ == "__main__":
-    import asyncio
-    async def main():
-        await asyncio.gather(
-            app.start(),
-            app2.start()
-        )
-    asyncio.run(main())
+app.start(),
+app2.start()
+#if __name__ == "__main__":
+    #import asyncio
+    #async def main():
+        #await asyncio.gather(
+            
+        
+    #asyncio.run(main())
