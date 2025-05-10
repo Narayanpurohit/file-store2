@@ -12,7 +12,7 @@ from pyrogram.types import (
     CallbackQuery,
     InputMediaPhoto
 )
-
+from bot2 import app2
 from config import API_ID, API_HASH, BOT_TOKEN, URL_SHORTENER_API, SHORTENER_DOMAIN, ADMINS
 from db import files_col, users_col, verifications_col
 
@@ -270,3 +270,4 @@ async def how_to_verify_handler(client, callback_query):
 # Run the bot
 if __name__ == "__main__":
     app.run()
+    app2.run()
