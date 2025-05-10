@@ -269,5 +269,5 @@ async def how_to_verify_handler(client, callback_query):
 
 # Run the bot
 if __name__ == "__main__":
-    app2.run()
+    app.run()
     app2.run()
