@@ -268,21 +268,6 @@ async def how_to_verify_handler(client, callback_query):
 
 
 # Run the bot
-#if __name__ == "__main__":
-    #app.run()
-    #app2.run()
-from pyrogram import idle
-
 if __name__ == "__main__":
-    import asyncio
-
-    async def main():
-        await app.start()
-        await app2.start()
-        print("Both bots are running...")
-        await idle()  # Keeps the bots running until manually stopped
-
-        await app.stop()
-        await app2.stop()
-
-    asyncio.run(main())
+    app2.run()
+    app2.run()
