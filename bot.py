@@ -73,7 +73,7 @@ async def handle_file(client, message: Message):
         "created_at": datetime.utcnow()
     })
 
-    link = f"https://t.me/irish1Obot?start={slug}"
+    link = f"https://t.me/RENAMER_JN_bot?start={slug}"
     await message.reply_text(f"Here's your download link:\n{link}")
     logger.info(f"File uploaded by {user_id}, slug: {slug}")
 
