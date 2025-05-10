@@ -104,7 +104,7 @@ async def handle_start(client, message: Message):
                 [InlineKeyboardButton("💳 Buy subscription| No ads", callback_data="buy_subs")]
             ])
             return await message.reply(
-                f"You are not verified, please verify yourself to continue:\n\nVerification link: {short_link}",
+                f"You are not verified, please verify yourself to continue:\n\nVerification link: {verify_link}",
                 reply_markup=buttons
             )
 
@@ -176,7 +176,7 @@ async def handle_back_verify(client, callback_query: CallbackQuery):
         [InlineKeyboardButton("Buy subscription | No ads", callback_data="buy_sub")]
     ])
     await callback_query.message.edit_caption(
-        caption=f"You are not verified, please verify yourself to continue:\n\nVerification link: {short_link}",
+        caption=f"You are not verified, please verify yourself to continue:\n\nVerification link: {verify_link}",
         reply_markup=buttons
     )
 
