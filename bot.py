@@ -12,7 +12,6 @@ from pyrogram.types import (
     CallbackQuery,
     InputMediaPhoto
 )
-from bot2 import app2
 from config import API_ID, API_HASH, BOT_TOKEN, URL_SHORTENER_API, SHORTENER_DOMAIN, ADMINS, BOT_TOKEN2
 from db import files_col, users_col, verifications_col
 
@@ -266,6 +265,24 @@ async def how_to_verify_handler(client, callback_query):
         )
     except Exception as e:
         logger.error(f"Error sending how-to video: {e}")
+
+@app2.on_message(filters.private & filters.command("start"))
+async def start_handler(client, message):
+    if len(message.command) > 1:
+        payload = message.command[1]
+        target_bot = "Itadori101bot" if len(payload) < 15 else "jin_ho_bot"
+        new_link = f"https://t.me/{target_bot}?start={payload}"
+
+        sent = await message.reply_text(
+            "This message will be deleted in 10 minutes. Use link before that.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Click here", url=new_link)]
+            ])
+        )
+        await asyncio.sleep(600)
+        await sent.delete()
+    else:
+        await message.reply_text("Welcome! Please use a valid start link.")
 
 
 # Run the bot
