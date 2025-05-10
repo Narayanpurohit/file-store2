@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 import requests
 
-from pyrogram import Client, filters
+from pyrogram import Client, filters,idle
 from pyrogram.types import (
     Message,
     InlineKeyboardMarkup,
@@ -268,12 +268,18 @@ async def how_to_verify_handler(client, callback_query):
         logger.error(f"Error sending how-to video: {e}")
 
 
-# Run both bots
+
+
 if __name__ == "__main__":
     import asyncio
+
     async def main():
-        await asyncio.gather(
-            app.start(),
-            app2.start()
-        )
+        await app.start()
+        await app2.start()
+        print("Both bots are running...")
+        await idle()  # Keeps the bots running until manually stopped
+
+        await app.stop()
+        await app2.stop()
+
     asyncio.run(main())
